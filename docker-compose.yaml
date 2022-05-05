@@ -1,0 +1,7 @@
+version: '3.9'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [ "/data/query_params.csv", "-m", "100" ]
