@@ -50,8 +50,8 @@ func (p *Pool) Submit(task *Task) {
 func (p *Pool) Dispatch() {
 	go func() {
 		for task := range p.waitQueue {
-			if w, ok := p.workers.findByRouteKey(task.RouteKey); ok {
-				w.Enqueue(task)
+			if worker, ok := p.workers.findByRouteKey(task.RouteKey); ok {
+				worker.Enqueue(task)
 			} else {
 				if p.workers.len() < p.config.MaxWorkers {
 					p.addWorker()
