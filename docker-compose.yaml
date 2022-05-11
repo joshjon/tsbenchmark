@@ -1,7 +1,18 @@
 version: '3.9'
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: [ "/data/query_params.csv", "-m", "100" ]
+  timescaledb:
+    image: timescale/timescaledb-ha:pg14-latest
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    user: postgres
+    volumes:
+      - ./database/cpu_usage.sql:/docker-entrypoint-initdb.d/cpu_usage.sql # create hypertable
+      - ./database/cpu_usage.csv:/var/lib/postgresql/data/cpu_usage.csv
+      - ./database/init.sh:/docker-entrypoint-initdb.d/init.sh # load data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
