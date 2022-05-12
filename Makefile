@@ -1,10 +1,11 @@
-.PHONY: db-up run db-down build run unit
+.PHONY: up down build run unit
 
-db-up:
-	docker-compose -p timescaledb up -d --build
+up:
+	docker-compose -p tsbenchmark up -d --build --force-recreate
+	./wait-for-ts.sh
 
-db-down:
-	docker-compose -p timescaledb down
+down:
+	docker-compose -p tsbenchmark down
 
 
 build:

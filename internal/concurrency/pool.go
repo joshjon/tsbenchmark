@@ -7,8 +7,8 @@ import (
 
 type PoolWorker interface {
 	Enqueue(task *Task)
-	CompletionFuture() *CompletionFuture
 	HasRouteKey(routeKey string) bool
+	Wait() *WorkerResult
 }
 
 type PoolConfig struct {
@@ -54,7 +54,10 @@ func (p *Pool) Dispatch() {
 				worker.Enqueue(task)
 			} else {
 				if p.workers.len() < p.config.MaxWorkers {
-					p.addWorker()
+					w := NewWorker(p.config.WorkerQueueSize, p.taskQueue)
+					w.Start()
+					p.workers.append(w)
+					zap.L().Debug("worker started", zap.Int("id", w.ID), zap.Int("worker_count", p.workers.len()))
 				}
 				p.taskQueue <- task
 			}
@@ -65,7 +68,7 @@ func (p *Pool) Dispatch() {
 
 // Wait blocks until all queued tasks have completed and all worker completion futures have
 // successfully returned their results.
-func (p *Pool) Wait() PoolResult {
+func (p *Pool) Wait() []*WorkerResult {
 	for {
 		if len(p.waitQueue) == 0 {
 			break
@@ -73,23 +76,7 @@ func (p *Pool) Wait() PoolResult {
 	}
 
 	close(p.waitQueue)
-
-	var results []*WorkerResult
-	completionFutures := p.workers.getCompletionFutures()
-
-	for _, future := range completionFutures {
-		result := future.Get()
-		results = append(results, result)
-	}
-
-	return newPoolResult(results)
-}
-
-func (p *Pool) addWorker() {
-	w := NewWorker(p.config.WorkerQueueSize, p.taskQueue)
-	w.Start()
-	p.workers.append(w)
-	zap.L().Debug("worker started", zap.Int("id", w.ID), zap.Int("worker_count", p.workers.len()))
+	return p.workers.waitAll()
 }
 
 type poolWorkers struct {
@@ -120,14 +107,14 @@ func (l *poolWorkers) findByRouteKey(routeKey string) (PoolWorker, bool) {
 	return nil, false
 }
 
-func (l *poolWorkers) getCompletionFutures() []*CompletionFuture {
+func (l *poolWorkers) waitAll() []*WorkerResult {
 	l.Lock()
 	defer l.Unlock()
-	var futures []*CompletionFuture
+	var results []*WorkerResult
 	for _, worker := range l.workers {
-		futures = append(futures, worker.CompletionFuture())
+		results = append(results, worker.Wait())
 	}
-	return futures
+	return results
 }
 
 func (l *poolWorkers) len() int {
