@@ -5,12 +5,6 @@ import (
 	"sync"
 )
 
-type PoolWorker interface {
-	Enqueue(task *Task)
-	HasRouteKey(routeKey string) bool
-	Wait() *WorkerResult
-}
-
 type PoolConfig struct {
 	MaxWorkers      int
 	WorkerQueueSize int
@@ -21,22 +15,17 @@ type Pool struct {
 	config    PoolConfig
 	waitQueue chan *Task
 	taskQueue chan *Task
-	workers   *poolWorkers
+	workers   poolWorkers
+	done      chan bool
 }
 
 func NewPool(config PoolConfig) *Pool {
-	// TODO: validate config
 	return &Pool{
 		config:    config,
 		waitQueue: make(chan *Task, config.WaitQueueSize),
 		taskQueue: make(chan *Task),
-		workers:   newPoolWorkers(),
+		done:      make(chan bool),
 	}
-}
-
-// Submit adds a task to the pool's wait queue.
-func (p *Pool) Submit(task *Task) {
-	p.waitQueue <- task
 }
 
 // Dispatch expects tasks to be submitted to the wait queue with Submit. Tasks are received
@@ -51,52 +40,55 @@ func (p *Pool) Dispatch() {
 	go func() {
 		for task := range p.waitQueue {
 			if worker, ok := p.workers.findByRouteKey(task.RouteKey); ok {
-				worker.Enqueue(task)
+				worker.Submit(task)
 			} else {
 				if p.workers.len() < p.config.MaxWorkers {
 					w := NewWorker(p.config.WorkerQueueSize, p.taskQueue)
 					w.Start()
 					p.workers.append(w)
-					zap.L().Debug("worker started", zap.Int("id", w.ID), zap.Int("worker_count", p.workers.len()))
+					zap.L().Debug("worker started", zap.Int("worker_count", p.workers.len()))
 				}
 				p.taskQueue <- task
 			}
 		}
+
 		close(p.taskQueue)
+		p.done <- true
+		zap.L().Debug("wait queue closed, dispatch done")
 	}()
 }
 
-// Wait blocks until all queued tasks have completed and all worker completion futures have
-// successfully returned their results.
+// Submit adds a task to the pool's wait queue.
+func (p *Pool) Submit(task *Task) {
+	p.waitQueue <- task
+}
+
+// Wait blocks until all tasks have completed and until all worker results have been received.
 func (p *Pool) Wait() []*WorkerResult {
+	close(p.waitQueue)
+	<-p.done
+
 	for {
-		if len(p.waitQueue) == 0 {
+		if len(p.waitQueue) == 0 && len(p.taskQueue) == 0 {
 			break
 		}
 	}
 
-	close(p.waitQueue)
 	return p.workers.waitAll()
 }
 
 type poolWorkers struct {
 	sync.Mutex
-	workers []PoolWorker
+	workers []*Worker
 }
 
-func newPoolWorkers(workers ...PoolWorker) *poolWorkers {
-	return &poolWorkers{
-		workers: workers,
-	}
-}
-
-func (l *poolWorkers) append(worker PoolWorker) {
+func (l *poolWorkers) append(worker *Worker) {
 	l.Lock()
 	defer l.Unlock()
 	l.workers = append(l.workers, worker)
 }
 
-func (l *poolWorkers) findByRouteKey(routeKey string) (PoolWorker, bool) {
+func (l *poolWorkers) findByRouteKey(routeKey string) (*Worker, bool) {
 	l.Lock()
 	defer l.Unlock()
 	for _, worker := range l.workers {

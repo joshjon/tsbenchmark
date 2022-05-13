@@ -1,7 +1,7 @@
-.PHONY: up down build run unit
+.PHONY: up down build run unit smoke
 
 up:
-	docker-compose -p tsbenchmark up -d --build --force-recreate
+	docker-compose -p tsbenchmark up -d
 	./wait-for-ts.sh
 
 down:
@@ -12,7 +12,13 @@ build:
 	docker build -t local/tsbenchmark .
 
 run:
-	docker run --rm --name tsbenchmark local/tsbenchmark foo.csv -m 10 -s 1000 -w 10000
+	docker run --rm --name tsbenchmark \
+ 		--network tsbenchmark_default \
+ 		--volume ${CURDIR}/database/query_params.csv:/data/query_params.csv \
+ 		local/tsbenchmark  -m 10 /data/query_params.csv
 
 unit:
 	go test -count=1 ./...
+
+smoke:
+	go test --tags=smoke -count=1 ./cmd...

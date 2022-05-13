@@ -1,45 +1,75 @@
 # ⚡ Timescale Benchmark
 
-Implement a command line tool that can be used to benchmark `SELECT` query performance across multiple workers/clients
-against a TimescaleDB instance. The tool should take as its input a CSV file (whose format is specified below) and a
-flag to specify the number of concurrent workers. After processing all the queries specified by the parameters in the
-CSV file, the tool should output a summary with the following stats:
+A command line tool to benchmark `SELECT` query performance across multiple workers against a TimescaleDB instance.
 
-- Number of queries processed
-- Total processing time across all queries
-- Minimum query time (for a single query)
-- Median query time
-- Average query time
-- Maximum query time
+**Implementation details:**
 
-## 🧰 Prerequisites
+- Workers are only started when an available query task with an unallocated host name is received, which ensures that
+  workers are not unnecessarily spun up. This is to avoid a scenario where 100 workers are started but every query has
+  the same host name, resulting in 99/100 workers not being utilised.
+- Routing of query tasks are completely based on host names. A query task will be sent to a worker only if the host name
+  is already allocated to it, otherwise the query is added to a task queue for new/available workers to pick up. This
+  results in an even distribution and makes it impossible to experience 'hot' workers.
 
-- Go 1.18.1
-- Docker 20.10.10 CE
+**Basic benchmarks**
+
+Total runtime for 200 mock queries hard coded to each take 200ms.
+
+- **1 worker:** 40.504757477s
+- **5 workers:** 9.791302255s
+- **10 workers:** 5.550826378s
 
 ## 🚀 Running
 
-1. Start and migrate TimescaleDB:
+Before proceeding, please ensure you have Docker installed and running.
+
+1. Start TimescaleDB and wait ~10s post startup to ensure test data is all loaded and the database is ready to accept
+   connections.
+
+   ```shell
+   docker-compose -p tsbenchmark up -d
    ```
-   docker-compose -p timescaledb up -d --build
-   ```
-2. Build tsbenchmark image:
-   ```
+
+2. Build the `tsbenchmark` image.
+
+   ```shell
    docker build -t local/tsbenchmark .
    ```
-3. Run tsbenchmark:
-   > ℹ️ Use `-h` flag to output help for all available options.
+
+3. Run the `tsbenchmark` container. Note that in the command below the container runs on same network as the database
+   and that a volume is mounted to give the container access to `query_params.csv`. You can also use the `-h` flag to
+   display usage and a list of all available flags.
+
+   ```shell
+   docker run --rm --name tsbenchmark \
+   --network tsbenchmark_default \
+   --volume $(pwd)/database/query_params.csv:/data/query_params.csv \
+   local/tsbenchmark  \
+   --max-workers 5 /data/query_params.csv # flags and filepath here
    ```
-   docker run --rm --name tsbenchmark local/tsbenchmark filename.csv -m 10
+4. Stop TimescaleDB.
    ```
-4. Stop TimescaleDB
-   ```
-   docker-compose -p timescaledb down
+   docker-compose -p tsbenchmark down
    ```
 
 ## 🔬 Testing
 
-- Unit tests: `make unit`
+Unit tests
+
+```shell
+go test -count=1 ./...
+```
+
+Smoke test
+
+```shell
+go test --tags=smoke -count=1 ./cmd...
+```
+
+## 🧰 Tools Used
+
+- Go 1.18.1
+- Docker 20.10.10 CE
 
 ## 🔍 Design
 
@@ -47,20 +77,23 @@ CSV file, the tool should output a summary with the following stats:
 
 ```mermaid
 flowchart LR;
-    Client--queue task-->pool;
-    subgraph worker pool
+    client--queue task-->pool;
+    pool-->wait_queue
+    subgraph  
+        wait_queue
         pool
-        w1
-        w2
-        w...n
+        worker_1
+        worker_2
+        worker...n
+        
     end
-    pool--queue unallocated task-->task_queue;
-    pool--queue allocated task-->w1;
-    pool--queue allocated task-->w2;
-    pool--queue allocated task-->w...n;
-    task_queue--receive task-->w1;
-    task_queue--receive task-->w2;
-    task_queue--receive task-->w...n;
+    wait_queue--queue unallocated task-->task_queue;
+    wait_queue--queue allocated task-->worker_1;
+    wait_queue--queue allocated task-->worker_2;
+    wait_queue--queue allocated task-->worker...n;
+    task_queue--receive task-->worker_1;
+    task_queue--receive task-->worker_2;
+    task_queue--receive task-->worker...n;
 
 ```
 
@@ -82,7 +115,7 @@ sequenceDiagram
         client-)pool: submit query task to pool wait queue
     end
     and pool dispatch
-        loop while len(pool_wait_queue) > 0
+        loop while pool_wait_queue open
             pool->> pool: receive task from wait queue
             pool->>worker: find worker for task route key (host name)
             alt worker found
