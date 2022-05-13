@@ -179,19 +179,19 @@ func newBenchmark(runtime time.Duration, results []*concurrency.WorkerResult) be
 		return benchmark{}
 	}
 
-	b.minQueryTime = durations[0]
-	b.maxQueryTime = durations[len(durations)-1]
-
 	if len(durations) == 1 {
 		b.avgQueryTime = durations[0]
 		b.medianQueryTime = durations[0]
 	}
 
 	if len(durations) > 1 {
-		b.avgQueryTime = b.totalQueryTime / time.Duration(len(durations))
 		sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+		b.avgQueryTime = b.totalQueryTime / time.Duration(len(durations))
 		b.medianQueryTime = median(durations)
 	}
+
+	b.minQueryTime = durations[0]
+	b.maxQueryTime = durations[len(durations)-1]
 
 	return b
 }
