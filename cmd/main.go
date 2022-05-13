@@ -127,15 +127,15 @@ func readAndQueue(filepath string, database *sql.DB, pool *concurrency.Pool) err
 }
 
 type benchmark struct {
-	workersRequired  int
-	runtime          time.Duration
-	completedQueries int
-	erroredQueries   int
-	totalQueryTime   time.Duration
-	minQueryTime     time.Duration
-	maxQueryTime     time.Duration
-	medianQueryTime  time.Duration
-	avgQueryTime     time.Duration
+	workersStarted      int
+	runtime             time.Duration
+	queryProcessingTime time.Duration
+	queryExecutions     int
+	queryErrors         int
+	minQueryTime        time.Duration
+	maxQueryTime        time.Duration
+	medianQueryTime     time.Duration
+	avgQueryTime        time.Duration
 }
 
 func (b benchmark) render() error {
@@ -144,11 +144,11 @@ func (b benchmark) render() error {
 
 	return pterm.DefaultBulletList.WithItems(
 		[]pterm.BulletListItem{
-			{Text: pterm.Green("Workers started: ") + strconv.Itoa(b.workersRequired)},
+			{Text: pterm.Green("Workers started: ") + strconv.Itoa(b.workersStarted)},
 			{Text: pterm.Green("Runtime: ") + b.runtime.String()},
-			{Text: pterm.Green("Query processing time (across workers): ") + b.totalQueryTime.String()},
-			{Text: pterm.Green("Query executions: ") + strconv.Itoa(b.completedQueries)},
-			{Text: pterm.Green("Query errors: ") + strconv.Itoa(b.erroredQueries)},
+			{Text: pterm.Green("Query processing time (across workers): ") + b.queryProcessingTime.String()},
+			{Text: pterm.Green("Query executions: ") + strconv.Itoa(b.queryExecutions)},
+			{Text: pterm.Green("Query errors: ") + strconv.Itoa(b.queryErrors)},
 			{Text: pterm.Green("Min query time: ") + b.minQueryTime.String()},
 			{Text: pterm.Green("Max query time: ") + b.maxQueryTime.String()},
 			{Text: pterm.Green("Median query time: ") + b.medianQueryTime.String()},
@@ -159,16 +159,16 @@ func (b benchmark) render() error {
 
 func newBenchmark(runtime time.Duration, results []*concurrency.WorkerResult) benchmark {
 	b := benchmark{
-		workersRequired: len(results),
-		runtime:         runtime,
+		workersStarted: len(results),
+		runtime:        runtime,
 	}
 
 	var durations []time.Duration
 	for _, result := range results {
-		b.completedQueries += result.Completed
+		b.queryExecutions += result.Completed
 		durations = append(durations, result.TaskDurations...)
-		b.totalQueryTime += result.TotalDuration
-		b.erroredQueries += len(result.Errors)
+		b.queryProcessingTime += result.TotalDuration
+		b.queryErrors += len(result.Errors)
 
 		for _, taskErr := range result.Errors {
 			zap.L().Error("query error", zap.Error(taskErr))
@@ -177,16 +177,12 @@ func newBenchmark(runtime time.Duration, results []*concurrency.WorkerResult) be
 
 	if len(durations) == 0 {
 		return benchmark{}
-	}
-
-	if len(durations) == 1 {
+	} else if len(durations) == 1 {
 		b.avgQueryTime = durations[0]
 		b.medianQueryTime = durations[0]
-	}
-
-	if len(durations) > 1 {
+	} else if len(durations) > 1 {
 		sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-		b.avgQueryTime = b.totalQueryTime / time.Duration(len(durations))
+		b.avgQueryTime = b.queryProcessingTime / time.Duration(len(durations))
 		b.medianQueryTime = median(durations)
 	}
 
