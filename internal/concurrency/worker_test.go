@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestPool_Worker_taskSuccess(t *testing.T) {
+func TestPool_Worker(t *testing.T) {
 	tests := []struct {
 		name    string
 		wantErr error
