@@ -2,7 +2,7 @@
 
 A command line tool to benchmark `SELECT` query performance across multiple workers against a TimescaleDB instance.
 
-**Implementation details:**
+**Implementation details**
 
 - Workers are only started when an available query task with an unallocated host name is received, which ensures that
   workers are not unnecessarily spun up. This is to avoid a scenario where 100 workers are started but every query has
@@ -11,13 +11,13 @@ A command line tool to benchmark `SELECT` query performance across multiple work
   is already allocated to it, otherwise the query is added to a task queue for new/available workers to pick up. This
   results in an even distribution and makes it impossible to experience 'hot' workers.
 
-**Basic benchmarks**
+**Concurrency performance**
 
-Benchmarks were run for 5000 mock queries hard coded to each take 200ms, where each query has a unique host name. Unique
-host names were used to ensure maximum allowed workers could be utilised. It is clearly evident that adding more workers
-improves overall runtime performance. However, it is also apparent that once a certain threshold is reached, more
-workers don't necessarily result in better performance. This is noticeable in benchmarks where workers started are
-greater than 500.
+In order to test worker concurrency performance, several runs were undertaken using 5000 mock queries hard coded to each
+take 200ms, where each query has a unique host name. Unique host names were used to ensure maximum allowed workers could
+be utilised. It is clearly evident that adding more workers improves overall runtime performance. However, it is also
+apparent that once a certain threshold is reached, more workers don't necessarily result in better performance. This is
+noticeable in runs where workers started were greater than 500.
 
 | Workers started | Runtime | Query processing time |
 |-----------------|---------|-----------------------|
@@ -56,7 +56,22 @@ Before proceeding, please ensure you have Docker installed and running.
    local/tsbenchmark  \
    --max-workers 5 /data/query_params.csv # flags and filepath here
    ```
-4. Stop TimescaleDB.
+
+   Example output:
+
+   ```
+    • Workers started: 5
+    • Runtime: 964.870334ms
+    • Query processing time (across workers): 3.677429499s
+    • Query executions: 200
+    • Query errors: 0
+    • Min query time: 9.603917ms
+    • Max query time: 239.652042ms
+    • Median query time: 12.008187ms
+    • Average query time: 18.387147ms
+    ```
+
+5. Stop TimescaleDB.
    ```
    docker-compose -p tsbenchmark down
    ```

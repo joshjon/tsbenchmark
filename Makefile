@@ -15,7 +15,7 @@ run:
 	docker run --rm --name tsbenchmark \
  		--network tsbenchmark_default \
  		--volume ${CURDIR}/database/query_params.csv:/data/query_params.csv \
- 		local/tsbenchmark  -m 10 /data/query_params.csv
+ 		local/tsbenchmark  -m 5 /data/query_params.csv
 
 unit:
 	go test -count=1 ./...
