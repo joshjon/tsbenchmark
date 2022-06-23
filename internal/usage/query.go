@@ -2,8 +2,12 @@ package usage
 
 import (
 	"database/sql"
-	"fmt"
 )
+
+const query = `SELECT time_bucket('1 minutes', ts) AS bucket, MIN(usage) AS min_usage, MAX(usage) AS max_usage, host, COUNT(*)
+FROM cpu_usage
+WHERE host = $1 and ts >= $2 and ts <= $3
+GROUP BY bucket, host;`
 
 type Result struct {
 	Count    int
@@ -16,15 +20,7 @@ type Result struct {
 // QueryMinMaxUsagePerMinuteInRange returns the max cpu usage and min cpu usage of the given
 // hostname for every minute in the time range specified by the start time and end time.
 func QueryMinMaxUsagePerMinuteInRange(db *sql.DB, host string, startTimestamp string, endTimestamp string) ([]Result, error) {
-	query := fmt.Sprintf(
-		"SELECT time_bucket('1 minutes', ts) AS bucket, MIN(usage) AS min_usage, MAX(usage) AS max_usage, host, COUNT(*)\n"+
-			"FROM cpu_usage\n"+
-			"WHERE host = '%s' and ts >= '%s' and ts <= '%s'\n"+
-			"GROUP BY bucket, host;",
-		host, startTimestamp, endTimestamp,
-	)
-
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, host, startTimestamp, endTimestamp)
 	if err != nil {
 		return nil, err
 	}

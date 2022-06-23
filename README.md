@@ -2,6 +2,20 @@
 
 A command line tool to benchmark `SELECT` query performance across multiple workers against a TimescaleDB instance.
 
+The tool takes a CSV file as its input, which includes row values 'hostname', 'start time', and 'end time' for
+generating a SQL query for each row. Each query returns the max cpu usage and min cpu usage of the given hostname for
+every minute in the time range specified by the start time and end time.
+Queries are executed by one of the concurrent workers the tool creates, with the constraint that queries for the same
+hostname be executed by the same worker each time. After processing all the queries specified by the parameters in the
+CSV file, the tool outputs a summary with the following stats:
+
+- Number of queries processed
+- Total processing time across all queries
+- The minimum query time (for a single query)
+- The median query time
+- The average query time
+- The maximum query time
+
 **Implementation details**
 
 - Workers are only started when an available query task with an unallocated host name is received, which ensures that

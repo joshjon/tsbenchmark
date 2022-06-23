@@ -1,8 +1,10 @@
 package config
 
 import (
-	"github.com/stretchr/testify/assert"
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConfig_Validate(t *testing.T) {
@@ -10,68 +12,40 @@ func TestConfig_Validate(t *testing.T) {
 		name    string
 		wantErr string
 		config  Config
+		fields  []string
 	}{
 		{
-			name:    "negative max workers",
-			wantErr: "MaxWorkers: must be no less than 1.",
+			name:    "field required",
+			wantErr: "cannot be blank",
+			config: Config{
+				MaxWorkers:         0,
+				WorkerQueueSize:    0,
+				WaitQueueSize:      0,
+				ReaderBufferSize:   0,
+				DatabaseConnection: "",
+			},
+			fields: []string{"MaxWorkers", "WorkerQueueSize", "WaitQueueSize", "ReaderBufferSize", "DatabaseConnection"},
+		},
+		{
+			name:    "int must be positive",
+			wantErr: "must be no less than 1",
 			config: Config{
 				MaxWorkers:         -1,
-				WorkerQueueSize:    1,
-				WaitQueueSize:      1,
-				ReaderBufferSize:   1,
-				DatabaseConnection: "non-empty",
-			},
-		},
-		{
-			name:    "negative worker queue size",
-			wantErr: "WorkerQueueSize: must be no less than 1.",
-			config: Config{
-				MaxWorkers:         1,
 				WorkerQueueSize:    -1,
-				WaitQueueSize:      1,
-				ReaderBufferSize:   1,
-				DatabaseConnection: "non-empty",
-			},
-		},
-		{
-			name:    "negative wait queue size",
-			wantErr: "WaitQueueSize: must be no less than 1.",
-			config: Config{
-				MaxWorkers:         1,
-				WorkerQueueSize:    1,
 				WaitQueueSize:      -1,
-				ReaderBufferSize:   1,
-				DatabaseConnection: "non-empty",
-			},
-		},
-		{
-			name:    "negative reader buffer size",
-			wantErr: "ReaderBufferSize: must be no less than 1.",
-			config: Config{
-				MaxWorkers:         1,
-				WorkerQueueSize:    1,
-				WaitQueueSize:      1,
 				ReaderBufferSize:   -1,
 				DatabaseConnection: "non-empty",
 			},
-		},
-		{
-			name:    "db connection empty",
-			wantErr: "DatabaseConnection: cannot be blank.",
-			config: Config{
-				MaxWorkers:         1,
-				WorkerQueueSize:    1,
-				WaitQueueSize:      1,
-				ReaderBufferSize:   1,
-				DatabaseConnection: "",
-			},
+			fields: []string{"MaxWorkers", "WorkerQueueSize", "WaitQueueSize", "ReaderBufferSize"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.config.Validate()
-			assert.EqualError(t, err, tt.wantErr)
+			for _, field := range tt.fields {
+				assert.Contains(t, err.Error(), fmt.Sprintf("%s: %s", field, tt.wantErr))
+			}
 		})
 	}
 }
